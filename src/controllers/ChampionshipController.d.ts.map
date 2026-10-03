@@ -1,0 +1,1 @@
+{"version":3,"file":"ChampionshipController.d.ts","sourceRoot":"","sources":["ChampionshipController.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAG5C,qBAAa,sBAAsB;WAClB,IAAI,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;WAWhC,OAAO,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;WAanC,MAAM,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;CAQlD"}

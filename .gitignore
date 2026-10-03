@@ -1,0 +1,32 @@
+node_modules/
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Prisma generated
+/generated/prisma
+
+# PostgreSQL data
+postgres_data/
+
+# Build output
+dist/
+
+# Environment files (keep only .env.example if needed)
+.env
+env
+
+# Build logs and artifacts
+*.log
+build_output.log
+tsc_output.txt
+hash.txt
+
+# TypeScript build artifacts from prisma.config
+prisma.config.js
+prisma.config.js.map
+prisma.config.d.ts
+prisma.config.d.ts.map

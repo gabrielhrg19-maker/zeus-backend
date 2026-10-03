@@ -1,0 +1,337 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  cpf           String   @unique
+  email         String   @unique
+  phone         String
+  password_hash String
+  address       String?
+  city          String?
+  state         String?
+  profilePic    String?
+  role          String   @default("USER") // USER, ADMIN, STAFF, JUDGE
+  federationYear Int?    // Ano vigente (ex: 2026) da ativação
+  resetToken     String?  @unique
+  resetTokenExpires DateTime?
+  acceptedTermsAt DateTime?
+  acceptedTermsVersion String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  orders        Order[]
+  creditCards   CreditCard[]
+  paymentLogs   PaymentLog[]
+  athletes      Athlete[]
+  judgeProfile   Judge?
+  stageLogs      StageLog[]
+}
+
+model Championship {
+  id              String   @id @default(uuid())
+  name            String
+  slug            String?  @unique // URL amigável (ex.: "uberaba")
+  description     String
+  date            DateTime
+  location        String
+  banner          String?
+  priceComp       Float    // Preço para competidor
+  priceVis        Float    // Preço para visitante
+  status          String   @default("OPEN") // OPEN, CLOSED
+  hasTshirtPromotion Boolean @default(false)
+  tshirtLimitComp    Int      @default(50)
+  tshirtLimitVis     Int      @default(100)
+  mpPublicKey     String?  // Chave Pública Mercado Pago (Campeonato)
+  mpAccessToken   String?  // Access Token Mercado Pago (Campeonato)
+  mpWebhookSecret String?  // Webhook Secret Mercado Pago (Campeonato)
+  showResults     Boolean  @default(true)
+  showMonitoring  Boolean  @default(true)
+  currentCategoryId String?  // ID da categoria atualmente no palco
+  presentedCategoryIds String[] @default([]) // IDs das categorias já apresentadas
+  
+  federationFee      Float    @default(50.0) // Valor da taxa de federação
+  mpFedPublicKey     String?  // Chave Pública Mercado Pago (Federação)
+  mpFedAccessToken   String?  // Access Token Mercado Pago (Federação)
+  mpFedWebhookSecret String?  // Webhook Secret Mercado Pago (Federação)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orders      Order[]
+  categories  Category[]
+  stages      Stage[]
+  athletes    Athlete[]
+  tickets     Ticket[]
+  judgingSessions JudgingSession[]
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  userId          String
+  championshipId  String?      // Optional for standalone Federation charges
+  type            String       // "COMPETITOR", "VISITOR", "FEDERATION"
+  paymentStatus   String       // "PENDING", "APPROVED", "FAILED"
+  amount          Float
+  includesFederation Boolean   @default(false)
+  wonTshirt       Boolean      @default(false)
+  gatewayOrderId  String?      @unique // ID retornado pelo Mercado Pago (payment.id)
+  acceptedTermsAt DateTime?
+  acceptedTermsVersion String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user            User         @relation(fields: [userId], references: [id])
+  championship    Championship? @relation(fields: [championshipId], references: [id])
+  ticket          Ticket?
+  categoryIds     String[]     @default([])
+  paymentAttempts PaymentAttempt[]
+}
+
+model PaymentAttempt {
+  id               String   @id @default(uuid())
+  orderId          String
+  paymentMethod    String   // "PIX" ou "CREDIT_CARD"
+  status           String   // "PENDING", "APPROVED", "REJECTED", "EXPIRED"
+  amount           Float
+  gatewayPaymentId String?  @unique // ID específico da transação no Mercado Pago
+  
+  // Dados do PIX
+  pixCopyPaste     String?  
+  pixBase64        String?  
+  pixExpiredAt     DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+
+model Ticket {
+  id              String   @id @default(uuid())
+  uuid            String   @unique @default(uuid()) // UUID for QRCode reading
+  orderId         String   @unique
+  championshipId  String?
+  status          String   @default("VALID") // "VALID", "EXPIRED"
+  expiresAt       DateTime? // 24h after creation
+  createdAt       DateTime @default(now())
+  validatedAt     DateTime?
+
+  order           Order          @relation(fields: [orderId], references: [id])
+  championship    Championship?  @relation(fields: [championshipId], references: [id])
+  scans           TicketScan[]
+}
+
+model TicketScan {
+  id          String   @id @default(uuid())
+  ticketId    String
+  action      String   // "ENTRY" or "EXIT"
+  scannedById String?  // User ID of the staff who scanned
+  scannedAt   DateTime @default(now())
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+}
+
+model CreditCard {
+  id           String   @id @default(uuid())
+  userId       String
+  maskedNumber String
+  expiry       String
+  token        String   // Simulando token do gateway (pagarme/stripe)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Upload {
+  id        String   @id @default(uuid())
+  filename  String
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model PaymentLog {
+  id              String   @id @default(uuid())
+  userId          String
+  orderId         String?  // ID do pedido ou Gateway ID
+  type            String   // FEDERATION, COMPETITOR, VISITOR
+  amount          Float?
+  status          String   // PENDING, REJECTED, APPROVED, ERROR, WEBHOOK
+  logMessage      String
+  gatewayResponse String?  // Mensagem/JSON do erro do portal
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model Athlete {
+  id              String   @id @default(uuid())
+  userId          String?
+  name            String
+  height          Float?
+  weight          Float?
+  athleteNumber   Int?
+  birthDate       DateTime?
+  categoryId      String?
+  championshipId  String
+  currentStageId  String?
+  status          String   @default("ACTIVE") // ACTIVE, ELIMINATED, FINISHED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User?    @relation(fields: [userId], references: [id])
+  category        Category? @relation(fields: [categoryId], references: [id])
+  championship    Championship @relation(fields: [championshipId], references: [id])
+  currentStage    Stage?   @relation(fields: [currentStageId], references: [id])
+  
+  logs            StageLog[]
+  scores          Score[]
+  results         Result[]
+
+  @@unique([championshipId, athleteNumber])
+}
+
+model Category {
+  id              String       @id @default(uuid())
+  name            String
+  parentName      String?
+  championshipId  String
+  minWeight       Float?
+  maxWeight       Float?
+  minHeight       Float?
+  maxHeight       Float?
+  poses           String[]     @default([])
+  order           Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  championship    Championship @relation(fields: [championshipId], references: [id])
+  athletes        Athlete[]
+  scores          Score[]
+  results         Result[]
+  judgingSessions JudgingSession[]
+}
+
+model Stage {
+  id              String   @id @default(uuid())
+  name            String   // Check-in, Pesagem, Conferência, Aquecimento, Pré-palco, Palco, Finalizado
+  order           Int
+  championshipId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  championship    Championship @relation(fields: [championshipId], references: [id])
+  athletes        Athlete[]
+  logs            StageLog[]
+}
+
+model StageLog {
+  id              String   @id @default(uuid())
+  athleteId       String
+  stageId         String
+  action          String   // ENTERED, COMPLETED
+  validatedById   String   // User ID (Staff/Admin)
+  timestamp       DateTime @default(now())
+  details         String?  // e.g. "Weight set to 85kg"
+  
+  athlete         Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  stage           Stage    @relation(fields: [stageId], references: [id])
+  validatedBy     User     @relation(fields: [validatedById], references: [id])
+}
+
+model Judge {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  name            String
+  isMaster        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation(fields: [userId], references: [id])
+  scores          Score[]
+  judgingSessions JudgingSession[]
+}
+
+model Score {
+  id              String   @id @default(uuid())
+  athleteId       String
+  judgeId         String
+  categoryId      String
+  sessionId       String?
+  poseName        String?   // e.g. "Front Double Biceps"
+  value           Float
+  round           Int      @default(1)
+  createdAt       DateTime @default(now())
+  
+  athlete         Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  judge           Judge    @relation(fields: [judgeId], references: [id])
+  category        Category @relation(fields: [categoryId], references: [id])
+  session         JudgingSession? @relation(fields: [sessionId], references: [id])
+}
+
+model JudgingSession {
+  id              String   @id @default(uuid())
+  championshipId  String
+  categoryId      String
+  judgeId         String
+  status          String   @default("SCORING") // SCORING, SUBMITTED, APPROVED, PUBLISHED
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  approvedBy      String?
+  publishedAt     DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  championship    Championship @relation(fields: [championshipId], references: [id])
+  category        Category     @relation(fields: [categoryId], references: [id])
+  judge           Judge        @relation(fields: [judgeId], references: [id])
+  scores          Score[]
+
+  @@unique([championshipId, categoryId, judgeId])
+}
+
+model Result {
+  id              String   @id @default(uuid())
+  categoryId      String
+  athleteId       String
+  rank            Int
+  averageScore    Float
+  isPublished     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  category        Category @relation(fields: [categoryId], references: [id])
+  athlete         Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+}
+
+model GlobalStage {
+  id        String   @id @default(uuid())
+  name      String
+  order     Int
+  createdAt DateTime @default(now())
+}
+
+model GlobalCategory {
+  id          String   @id @default(uuid())
+  name        String
+  parentName  String?
+  minWeight   Float?
+  maxWeight   Float?
+  minHeight   Float?
+  maxHeight   Float?
+  poses       String[] @default([])
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+}

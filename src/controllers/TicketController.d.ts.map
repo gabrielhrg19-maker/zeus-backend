@@ -1,0 +1,1 @@
+{"version":3,"file":"TicketController.d.ts","sourceRoot":"","sources":["TicketController.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAG5C,qBAAa,gBAAgB;WACZ,UAAU,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;WAiBtC,QAAQ,CAAC,GAAG,EAAE,OAAO,EAAE,GAAG,EAAE,QAAQ;CAqBpD"}
