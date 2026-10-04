@@ -13,6 +13,7 @@ import paymentRoutes from './routes/payment.routes';
 import uploadRoutes from './routes/upload.routes';
 import eventRoutes from './routes/event.routes';
 import collaboratorRoutes from './routes/collaborator.routes';
+import siteSettingRoutes from './routes/siteSetting.routes';
 import { startEmailWorker } from './queues/email.worker';
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/collaborators', collaboratorRoutes);
+app.use('/api/site-settings', siteSettingRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error(`[${new Date().toISOString()}] EXPRESS UNHANDLED ERROR:`, err);
