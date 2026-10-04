@@ -15,6 +15,9 @@ router.get('/', authMiddleware, adminMiddleware, UploadController.listUploads);
 router.post('/banner', authMiddleware, adminMiddleware, UploadController.uploadBanner);
 router.post('/', authMiddleware, adminMiddleware, UploadController.uploadImage);
 
+// Admin only: Edit image
+router.put('/:id', authMiddleware, adminMiddleware, UploadController.updateUpload);
+
 // Admin only: Delete image
 router.delete('/:id', authMiddleware, adminMiddleware, UploadController.deleteUpload);
 

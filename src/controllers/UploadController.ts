@@ -114,6 +114,60 @@ export class UploadController {
         }
     }
 
+    static async updateUpload(req: Request, res: Response) {
+        uploadImageMiddleware(req, res, async (err) => {
+            if (err instanceof multer.MulterError) {
+                return res.status(400).json({ error: 'Erro no upload: ' + err.message });
+            } else if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+
+            try {
+                const id = req.params.id as string;
+                const { filename } = req.body;
+
+                const existing = await prisma.upload.findUnique({ where: { id } });
+                if (!existing) {
+                    return res.status(404).json({ error: 'Imagem não encontrada' });
+                }
+
+                const dataToUpdate: any = {};
+                if (filename && filename.trim()) {
+                    dataToUpdate.filename = filename.trim();
+                }
+                if (req.file) {
+                    dataToUpdate.data = req.file.buffer;
+                    dataToUpdate.mimeType = req.file.mimetype;
+                    if (!filename) {
+                        dataToUpdate.filename = req.file.originalname;
+                    }
+                }
+
+                const updated = await prisma.upload.update({
+                    where: { id },
+                    data: dataToUpdate,
+                    select: {
+                        id: true,
+                        filename: true,
+                        mimeType: true,
+                        createdAt: true
+                    }
+                });
+
+                res.json({
+                    id: updated.id,
+                    filename: updated.filename,
+                    mimeType: updated.mimeType,
+                    url: `/api/uploads/${updated.id}`,
+                    createdAt: updated.createdAt
+                });
+            } catch (error: any) {
+                console.error('[Upload] Erro ao atualizar imagem:', error);
+                res.status(500).json({ error: 'Erro ao atualizar imagem' });
+            }
+        });
+    }
+
     static async deleteUpload(req: Request, res: Response) {
         try {
             const id = req.params.id as string;
