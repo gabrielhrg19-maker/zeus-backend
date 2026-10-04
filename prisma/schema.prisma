@@ -335,3 +335,14 @@ model GlobalCategory {
   order       Int      @default(0)
   createdAt   DateTime @default(now())
 }
+
+model Collaborator {
+  id        String   @id @default(uuid())
+  name      String
+  role      String
+  image     String
+  order     Int      @default(0)
+  duration  Int?     @default(5000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

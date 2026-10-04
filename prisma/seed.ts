@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import fs from 'fs';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -206,6 +208,87 @@ async function main() {
     console.log(`✅ ${categoriesData.length} categorias criadas.`);
   } else {
     console.log(`ℹ️ ${existingGlobalCategories} categorias globais já existem. Pulando criação (preservando alterações do admin).`);
+  }
+
+  // 4. Popular Fotos Existentes do Site se não existirem
+  const seedImagesDir = path.resolve(__dirname, '../seed-images');
+  const uploadMap = new Map<string, string>();
+
+  if (fs.existsSync(seedImagesDir)) {
+    console.log('📸 Verificando fotos do site para popular o banco...');
+    const files = fs.readdirSync(seedImagesDir);
+    for (const file of files) {
+      const ext = path.extname(file).toLowerCase();
+      if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) continue;
+
+      let existing = await prisma.upload.findFirst({
+        where: { filename: file }
+      });
+
+      if (!existing) {
+        try {
+          const filePath = path.join(seedImagesDir, file);
+          const buffer = fs.readFileSync(filePath);
+          const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+          existing = await prisma.upload.create({
+            data: {
+              filename: file,
+              mimeType,
+              data: buffer
+            }
+          });
+          console.log(`📸 Foto seeded no banco: ${file}`);
+        } catch (err) {
+          console.error(`Erro ao criar upload para ${file}:`, err);
+        }
+      }
+
+      if (existing) {
+        uploadMap.set(file, `/api/uploads/${existing.id}`);
+      }
+    }
+    console.log(`✅ ${uploadMap.size} fotos sincronizadas com o banco.`);
+  }
+
+  // 5. Popular Colaboradores se não existirem
+  const existingCollaborators = await prisma.collaborator.count();
+  if (existingCollaborators === 0) {
+    console.log('➕ Criando colaboradores padrão...');
+    const defaultColabs = [
+      {
+        name: 'Luciano Gonzales',
+        role: '•Embaixador da WBPF Brasil \n•Presidente WBPF Goiás \n•Vice-Presidente Liga WBPF Minas \n•CEO. Fundador. Diretor do Zeus Evolution Brasil',
+        image: uploadMap.get('luciano.jpeg') || '/assets/images/luciano.jpeg',
+        order: 1,
+        duration: 8000
+      },
+      {
+        name: 'Reginaldo Gomes',
+        role: 'Presidente WBPF Brasil / Presidente WBPF South America',
+        image: uploadMap.get('Reginaldo  Gomes.jpeg') || '/assets/images/Reginaldo  Gomes.jpeg',
+        order: 2,
+        duration: 5000
+      },
+      {
+        name: 'Diego Maradona',
+        role: 'Vice-Presidente WBPF Goiás / Representante Zeus Evolution Goiás',
+        image: uploadMap.get('colaborador_zeus1.jpeg') || '/assets/images/colaborador_zeus1.jpeg',
+        order: 3,
+        duration: 5000
+      },
+      {
+        name: 'Léo Pestana',
+        role: 'Representante Zeus Evolution São Paulo',
+        image: uploadMap.get('Léo pestana.jpeg') || '/assets/images/Léo pestana.jpeg',
+        order: 4,
+        duration: 5000
+      }
+    ];
+
+    for (const c of defaultColabs) {
+      await prisma.collaborator.create({ data: c });
+    }
+    console.log('✅ Colaboradores criados com sucesso.');
   }
 
   console.log('🏁 Seed finalizado com sucesso!');
