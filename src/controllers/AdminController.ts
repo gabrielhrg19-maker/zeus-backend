@@ -92,20 +92,83 @@ export class AdminController {
     static async deleteChampionship(req: Request, res: Response) {
         try {
             const id = req.params.id as string;
+            const force = req.query.force === 'true';
 
-            // Check if there are orders related to this championship
-            const orders = await prisma.order.findFirst({ where: { championshipId: id } });
-            if (orders) {
-                return res.status(400).json({ error: 'Não é possível excluir um campeonato que já possui vendas registradas.' });
+            // Check if championship exists
+            const existing = await prisma.championship.findUnique({ where: { id } });
+            if (!existing) {
+                return res.status(404).json({ error: 'Campeonato não encontrado' });
             }
 
-            await prisma.championship.delete({
-                where: { id }
+            // Check if there are orders related to this championship
+            const orders = await prisma.order.findMany({ where: { championshipId: id } });
+            const paidOrders = orders.filter(o => o.paymentStatus === 'APPROVED');
+            if (paidOrders.length > 0 && !force) {
+                return res.status(400).json({ 
+                    error: `Não é possível excluir um campeonato que já possui ${paidOrders.length} pedido(s) aprovado(s).` 
+                });
+            }
+
+            await prisma.$transaction(async (tx) => {
+                // If force or unpaid orders, delete orders and related payments/tickets
+                if (orders.length > 0) {
+                    const orderIds = orders.map(o => o.id);
+                    await tx.paymentAttempt.deleteMany({ where: { orderId: { in: orderIds } } });
+                    await tx.ticketScan.deleteMany({ where: { ticket: { championshipId: id } } });
+                    await tx.ticket.deleteMany({ where: { championshipId: id } });
+                    await tx.order.deleteMany({ where: { championshipId: id } });
+                }
+
+                // Delete judging session scores & judging sessions
+                const sessions = await tx.judgingSession.findMany({ where: { championshipId: id } });
+                const sessionIds = sessions.map(s => s.id);
+                if (sessionIds.length > 0) {
+                    await tx.score.deleteMany({ where: { sessionId: { in: sessionIds } } });
+                    await tx.judgingSession.deleteMany({ where: { championshipId: id } });
+                }
+
+                // Delete results and scores related to categories
+                const categories = await tx.category.findMany({ where: { championshipId: id } });
+                const categoryIds = categories.map(c => c.id);
+                if (categoryIds.length > 0) {
+                    await tx.score.deleteMany({ where: { categoryId: { in: categoryIds } } });
+                    await tx.result.deleteMany({ where: { categoryId: { in: categoryIds } } });
+                }
+
+                // Delete stage logs, scores, results and athletes
+                const athletes = await tx.athlete.findMany({ where: { championshipId: id } });
+                const athleteIds = athletes.map(a => a.id);
+                if (athleteIds.length > 0) {
+                    await tx.stageLog.deleteMany({ where: { athleteId: { in: athleteIds } } });
+                    await tx.score.deleteMany({ where: { athleteId: { in: athleteIds } } });
+                    await tx.result.deleteMany({ where: { athleteId: { in: athleteIds } } });
+                    await tx.athlete.deleteMany({ where: { championshipId: id } });
+                }
+
+                // Delete stages
+                const stages = await tx.stage.findMany({ where: { championshipId: id } });
+                const stageIds = stages.map(s => s.id);
+                if (stageIds.length > 0) {
+                    await tx.stageLog.deleteMany({ where: { stageId: { in: stageIds } } });
+                    await tx.stage.deleteMany({ where: { championshipId: id } });
+                }
+
+                // Delete categories
+                if (categoryIds.length > 0) {
+                    await tx.category.deleteMany({ where: { championshipId: id } });
+                }
+
+                // Delete tickets
+                await tx.ticket.deleteMany({ where: { championshipId: id } });
+
+                // Delete championship
+                await tx.championship.delete({ where: { id } });
             });
 
             res.json({ message: 'Campeonato excluído com sucesso' });
-        } catch (e) {
-            res.status(500).json({ error: 'Erro ao excluir campeonato' });
+        } catch (e: any) {
+            console.error('[AdminController] Erro ao excluir campeonato:', e);
+            res.status(500).json({ error: 'Erro ao excluir campeonato: ' + (e?.message || 'Erro interno') });
         }
     }
 

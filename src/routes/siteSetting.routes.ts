@@ -5,10 +5,12 @@ import { adminMiddleware } from '../middleware/admin.middleware';
 
 const router = Router();
 
-// Public: get site settings for landing page
+// Public: get site settings for landing page (all pages or specific page via :page / ?page=)
 router.get('/', SiteSettingController.getSettings);
+router.get('/:page', SiteSettingController.getSettings);
 
-// Admin: update site settings
+// Admin: update site settings (all or specific page)
 router.put('/', authMiddleware, adminMiddleware, SiteSettingController.updateSettings);
+router.put('/:page', authMiddleware, adminMiddleware, SiteSettingController.updateSettings);
 
 export default router;

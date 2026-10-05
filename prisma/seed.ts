@@ -257,30 +257,23 @@ async function main() {
     const defaultColabs = [
       {
         name: 'Luciano Gonzales',
-        role: '•Embaixador da WBPF Brasil \n•Presidente WBPF Goiás \n•Vice-Presidente Liga WBPF Minas \n•CEO. Fundador. Diretor do Zeus Evolution Brasil',
+        role: '•CEO • Fundador • Diretor do Zeus Evolution Brasil',
         image: uploadMap.get('luciano.jpeg') || '/assets/images/luciano.jpeg',
         order: 1,
         duration: 8000
       },
       {
-        name: 'Reginaldo Gomes',
-        role: 'Presidente WBPF Brasil / Presidente WBPF South America',
-        image: uploadMap.get('Reginaldo  Gomes.jpeg') || '/assets/images/Reginaldo  Gomes.jpeg',
-        order: 2,
-        duration: 5000
-      },
-      {
         name: 'Diego Maradona',
-        role: 'Vice-Presidente WBPF Goiás / Representante Zeus Evolution Goiás',
+        role: 'Representante Zeus Evolution Goiás',
         image: uploadMap.get('colaborador_zeus1.jpeg') || '/assets/images/colaborador_zeus1.jpeg',
-        order: 3,
+        order: 2,
         duration: 5000
       },
       {
         name: 'Léo Pestana',
         role: 'Representante Zeus Evolution São Paulo',
         image: uploadMap.get('Léo pestana.jpeg') || '/assets/images/Léo pestana.jpeg',
-        order: 4,
+        order: 3,
         duration: 5000
       }
     ];
@@ -307,7 +300,7 @@ async function main() {
         vision: 'Transformar o Zeus Evolution em um dos maiores eventos fitness do Brasil, unindo competição de alto nível, feira de negócios e experiências exclusivas, posicionando-se como referência nacional em estrutura, inovação e valorização do atleta.',
         values: '• Valorização do atleta: Reconhecer o esforço, a disciplina e a trajetória de cada competidor.\n• Excelência e profissionalismo: Entregar organização, estrutura e premiação em padrão nacional.\n• Transparência e ética: Atuar com respeito às regras, clareza nas informações e justiça nas decisões.\n• Inovação: Buscar constantemente evolução em formato, experiências e oportunidades dentro do evento.\n• Crescimento do esporte: Contribuir para o fortalecimento do fisiculturismo no cenário nacional.',
         historyTitle: 'A História do Zeus Evolution',
-        historyText: 'ZEUS. MAIS QUE UM EVENTO, UM SISTEMA.\n\nO Zeus nasce com um propósito claro: elevar o padrão do fisiculturismo nacional e mundial. \nSomos um evento autossustentável, com estrutura própria e parcerias estratégicas que garantem qualidade, da produção dos troféus às camisetas, da capacitação da equipe à entrega final no palco.\nCriado, idealizado e fundado em Uberlândia  MG, por Luciano Gonzalez, embaixador da WPF Brasil, e com a Concessão do Ilmo Sr Reginaldo Gomes presidente da WBPF Brasil e levar a WBPF no seu lugar do cenário. \nO Zeus não improvisa. Aqui, tudo é planejado e executado com excelência.\nNosso modelo é simples e sólido: levamos uma estrutura completa, com equipe treinada.\nO parceiro local cuida da praça. O Zeus cuida do evento.\nTrabalhamos com transparência total: todos os custos operacionais são quitados, equipe, produção, premiação, estrutura, taxas e serviços. O investimento é respeitado. E o resultado é dividido de forma justa.\nO Zeus Evolution nasce para quebrar um padrão antigo onde o atleta paga caro, e recebe pouco.',
+        historyText: 'ZEUS. MAIS QUE UM EVENTO, UM SISTEMA.\n\nO Zeus nasce com um propósito claro: elevar o padrão do fisiculturismo nacional e mundial. \nSomos um evento autossustentável, com estrutura própria e parcerias estratégicas que garantem qualidade, da produção dos troféus às camisetas, da capacitação da equipe à entrega final no palco.\nCriado, idealizado e fundado em Uberlândia - MG, por Luciano Gonzalez. \nO Zeus não improvisa. Aqui, tudo é planejado e executado com excelência.\nNosso modelo é simples e sólido: levamos uma estrutura completa, com equipe treinada.\nO parceiro local cuida da praça. O Zeus cuida do evento.\nTrabalhamos com transparência total: todos os custos operacionais são quitados, equipe, produção, premiação, estrutura, taxas e serviços. O investimento é respeitado. E o resultado é dividido de forma justa.\nO Zeus Evolution nasce para quebrar um padrão antigo onde o atleta paga caro, e recebe pouco.',
         instagramUrl: 'https://www.instagram.com/zeusevolutioncb?igsh=MWR1Y25lZWo1NDM3bw==',
         whatsappUrl: 'https://wa.me/553492440149',
         whatsappPhone: '+55 34 9244-0149',
