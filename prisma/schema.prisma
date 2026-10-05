@@ -364,3 +364,16 @@ model SiteSetting {
   whatsappPhone   String?  @default("+55 34 9244-0149")
   updatedAt       DateTime @updatedAt
 }
+
+model Partner {
+  id        String   @id @default(uuid())
+  name      String
+  category  String?  @default("Parceiro Oficial")
+  image     String
+  whatsapp  String?
+  instagram String?
+  website   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
