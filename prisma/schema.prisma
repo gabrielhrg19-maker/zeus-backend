@@ -154,12 +154,15 @@ model CreditCard {
 }
 
 model Upload {
-  id        String   @id @default(uuid())
-  filename  String
-  mimeType  String
-  data      Bytes
-  category  String?  @default("geral")
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  filename    String
+  mimeType    String
+  data        Bytes
+  category    String?  @default("geral")
+  title       String?
+  subtitle    String?
+  description String?
+  createdAt   DateTime @default(now())
 }
 
 model PaymentLog {

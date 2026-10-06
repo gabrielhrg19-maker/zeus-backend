@@ -30,6 +30,15 @@ async function ensureUploadTable() {
         await prisma.$executeRawUnsafe(`
             ALTER TABLE "Upload" ADD COLUMN IF NOT EXISTS "category" TEXT DEFAULT 'geral';
         `);
+        await prisma.$executeRawUnsafe(`
+            ALTER TABLE "Upload" ADD COLUMN IF NOT EXISTS "title" TEXT;
+        `);
+        await prisma.$executeRawUnsafe(`
+            ALTER TABLE "Upload" ADD COLUMN IF NOT EXISTS "subtitle" TEXT;
+        `);
+        await prisma.$executeRawUnsafe(`
+            ALTER TABLE "Upload" ADD COLUMN IF NOT EXISTS "description" TEXT;
+        `);
         uploadTableChecked = true;
     } catch (e: any) {
         console.warn('[Upload] ensureUploadTable error:', e?.message || e);
@@ -87,17 +96,33 @@ export class UploadController {
 
             try {
                 const category = req.body.category || (req.query.category as string) || 'geral';
+                const title = req.body.title ? String(req.body.title).trim() : null;
+                const subtitle = req.body.subtitle ? String(req.body.subtitle).trim() : null;
+                const description = req.body.description ? String(req.body.description).trim() : null;
+
                 const record = await prisma.upload.create({
                     data: {
                         filename: file.originalname,
                         mimeType: file.mimetype,
                         data: file.buffer,
                         category: category,
+                        title: title,
+                        subtitle: subtitle,
+                        description: description,
                     }
                 });
 
                 const fileUrl = `/api/uploads/${record.id}`;
-                res.json({ id: record.id, url: fileUrl, filename: record.filename, category: record.category, createdAt: record.createdAt });
+                res.json({ 
+                    id: record.id, 
+                    url: fileUrl, 
+                    filename: record.filename, 
+                    title: record.title || '',
+                    subtitle: record.subtitle || '',
+                    description: record.description || '',
+                    category: record.category, 
+                    createdAt: record.createdAt 
+                });
             } catch (dbErr: any) {
                 console.error('[Upload] Erro ao salvar no banco:', dbErr);
                 res.status(500).json({ error: 'Erro ao salvar imagem no banco de dados' });
@@ -119,6 +144,9 @@ export class UploadController {
                 select: {
                     id: true,
                     filename: true,
+                    title: true,
+                    subtitle: true,
+                    description: true,
                     mimeType: true,
                     category: true,
                     createdAt: true
@@ -129,6 +157,9 @@ export class UploadController {
             const list = uploads.map(u => ({
                 id: u.id,
                 filename: u.filename,
+                title: u.title || '',
+                subtitle: u.subtitle || '',
+                description: u.description || '',
                 mimeType: u.mimeType,
                 category: u.category || 'geral',
                 url: `/api/uploads/${u.id}`,
@@ -153,7 +184,7 @@ export class UploadController {
 
             try {
                 const id = req.params.id as string;
-                const { filename, category } = req.body;
+                const { filename, category, title, subtitle, description } = req.body;
 
                 const existing = await prisma.upload.findUnique({ where: { id } });
                 if (!existing) {
@@ -167,6 +198,15 @@ export class UploadController {
                 }
                 if (category && category.trim()) {
                     dataToUpdate.category = category.trim();
+                }
+                if (title !== undefined) {
+                    dataToUpdate.title = title ? String(title).trim() : null;
+                }
+                if (subtitle !== undefined) {
+                    dataToUpdate.subtitle = subtitle ? String(subtitle).trim() : null;
+                }
+                if (description !== undefined) {
+                    dataToUpdate.description = description ? String(description).trim() : null;
                 }
                 if (file) {
                     dataToUpdate.data = file.buffer;
@@ -182,6 +222,9 @@ export class UploadController {
                     select: {
                         id: true,
                         filename: true,
+                        title: true,
+                        subtitle: true,
+                        description: true,
                         mimeType: true,
                         category: true,
                         createdAt: true
@@ -191,6 +234,9 @@ export class UploadController {
                 res.json({
                     id: updated.id,
                     filename: updated.filename,
+                    title: updated.title || '',
+                    subtitle: updated.subtitle || '',
+                    description: updated.description || '',
                     mimeType: updated.mimeType,
                     category: updated.category || 'geral',
                     url: `/api/uploads/${updated.id}`,
