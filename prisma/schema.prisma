@@ -158,6 +158,7 @@ model Upload {
   filename  String
   mimeType  String
   data      Bytes
+  category  String?  @default("geral")
   createdAt DateTime @default(now())
 }
 
@@ -362,6 +363,7 @@ model SiteSetting {
   instagramUrl    String?  @default("https://www.instagram.com/zeusevolutioncb?igsh=MWR1Y25lZWo1NDM3bw==")
   whatsappUrl     String?  @default("https://wa.me/553492440149")
   whatsappPhone   String?  @default("+55 34 9244-0149")
+  instructionImages String?
   updatedAt       DateTime @updatedAt
 }
 

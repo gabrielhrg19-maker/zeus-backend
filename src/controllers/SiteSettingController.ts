@@ -120,13 +120,75 @@ async function ensureSiteSettingTable() {
                 "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        await prisma.$executeRawUnsafe(`
+            ALTER TABLE "SiteSetting" ADD COLUMN IF NOT EXISTS "instructionImages" TEXT;
+        `);
         siteSettingTableChecked = true;
     } catch (e: any) {
         console.warn('[SiteSetting] ensureSiteSettingTable check:', e?.message || e);
     }
 }
 
+function parseInstructions(val: any): string[] {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function formatSettingOutput(item: any) {
+    if (!item) return item;
+    return {
+        ...item,
+        instructionImages: parseInstructions(item.instructionImages)
+    };
+}
+
 export class SiteSettingController {
+    static async getInstructions(req: Request, res: Response) {
+        try {
+            await ensureSiteSettingTable();
+            const setting = await prisma.siteSetting.findUnique({
+                where: { id: 'default' }
+            });
+            const images = parseInstructions(setting?.instructionImages);
+            res.json({ images });
+        } catch (e: any) {
+            console.error('[SiteSettings] Erro ao buscar instruções:', e);
+            res.json({ images: [] });
+        }
+    }
+
+    static async updateInstructions(req: Request, res: Response) {
+        try {
+            await ensureSiteSettingTable();
+            const { images } = req.body;
+            const imagesArray = Array.isArray(images) ? images : [];
+            const jsonStr = JSON.stringify(imagesArray);
+
+            const updated = await prisma.siteSetting.upsert({
+                where: { id: 'default' },
+                create: {
+                    id: 'default',
+                    title: 'Zeus Evolution',
+                    instructionImages: jsonStr
+                },
+                update: {
+                    instructionImages: jsonStr
+                }
+            });
+
+            res.json({ success: true, images: parseInstructions(updated.instructionImages) });
+        } catch (e: any) {
+            console.error('[SiteSettings] Erro ao salvar instruções:', e);
+            res.status(500).json({ error: 'Erro ao salvar instruções do evento' });
+        }
+    }
+
     static async getSettings(req: Request, res: Response) {
         try {
             await ensureSiteSettingTable();
@@ -139,11 +201,11 @@ export class SiteSettingController {
                 });
 
                 const fallback = defaultSettingsByPage[targetId] || defaultSettingsByPage.default;
-                return res.json({
+                return res.json(formatSettingOutput({
                     ...fallback,
                     ...(setting || {}),
                     id: targetId
-                });
+                }));
             }
 
             // Fetch all settings from DB
@@ -153,11 +215,11 @@ export class SiteSettingController {
 
             const pages: Record<string, any> = {};
             for (const [key, defaults] of Object.entries(defaultSettingsByPage)) {
-                pages[key] = {
+                pages[key] = formatSettingOutput({
                     ...defaults,
                     ...(dbMap.get(key) || {}),
                     id: key
-                };
+                });
             }
 
             // Backwards compatibility: root properties match "default" page
@@ -170,6 +232,7 @@ export class SiteSettingController {
             console.error('[SiteSettings] Erro ao buscar configurações:', error);
             res.json({
                 ...defaultSettingsByPage.default,
+                instructionImages: [],
                 pages: defaultSettingsByPage
             });
         }
@@ -184,7 +247,14 @@ export class SiteSettingController {
 
             const fallback = defaultSettingsByPage[targetId] || defaultSettingsByPage.default;
 
-            const cleanCreateData = {
+            let instructionImagesStr: string | null = null;
+            if (data.instructionImages !== undefined) {
+                instructionImagesStr = Array.isArray(data.instructionImages)
+                    ? JSON.stringify(data.instructionImages)
+                    : (typeof data.instructionImages === 'string' ? data.instructionImages : '[]');
+            }
+
+            const cleanCreateData: any = {
                 title: data.title ?? fallback.title ?? 'Zeus Evolution',
                 subtitle: data.subtitle ?? fallback.subtitle ?? '',
                 heroBanner: data.heroBanner ?? fallback.heroBanner ?? null,
@@ -199,6 +269,9 @@ export class SiteSettingController {
                 whatsappUrl: data.whatsappUrl ?? fallback.whatsappUrl ?? 'https://wa.me/553492440149',
                 whatsappPhone: data.whatsappPhone ?? fallback.whatsappPhone ?? '+55 34 9244-0149',
             };
+            if (instructionImagesStr !== null) {
+                cleanCreateData.instructionImages = instructionImagesStr;
+            }
 
             const updated = await prisma.siteSetting.upsert({
                 where: { id: targetId },
@@ -220,10 +293,11 @@ export class SiteSettingController {
                     ...(data.instagramUrl !== undefined && { instagramUrl: data.instagramUrl }),
                     ...(data.whatsappUrl !== undefined && { whatsappUrl: data.whatsappUrl }),
                     ...(data.whatsappPhone !== undefined && { whatsappPhone: data.whatsappPhone }),
+                    ...(instructionImagesStr !== null && { instructionImages: instructionImagesStr }),
                 }
             });
 
-            res.json(updated);
+            res.json(formatSettingOutput(updated));
         } catch (error: any) {
             console.error('[SiteSettings] Erro ao atualizar configurações:', error);
             res.status(500).json({ error: error?.message || 'Erro ao atualizar configurações do site' });

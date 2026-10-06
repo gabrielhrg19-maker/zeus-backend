@@ -23,8 +23,22 @@ function getUploadedFile(req: Request): Express.Multer.File | undefined {
     return undefined;
 }
 
+let uploadTableChecked = false;
+async function ensureUploadTable() {
+    if (uploadTableChecked) return;
+    try {
+        await prisma.$executeRawUnsafe(`
+            ALTER TABLE "Upload" ADD COLUMN IF NOT EXISTS "category" TEXT DEFAULT 'geral';
+        `);
+        uploadTableChecked = true;
+    } catch (e: any) {
+        console.warn('[Upload] ensureUploadTable error:', e?.message || e);
+    }
+}
+
 export class UploadController {
     static async uploadBanner(req: Request, res: Response) {
+        await ensureUploadTable();
         uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
@@ -38,16 +52,18 @@ export class UploadController {
             }
 
             try {
+                const category = req.body.category || 'banner';
                 const record = await prisma.upload.create({
                     data: {
                         filename: file.originalname,
                         mimeType: file.mimetype,
                         data: file.buffer,
+                        category: category,
                     }
                 });
 
                 const fileUrl = `/api/uploads/${record.id}`;
-                res.json({ id: record.id, url: fileUrl, filename: record.filename });
+                res.json({ id: record.id, url: fileUrl, filename: record.filename, category: record.category });
             } catch (dbErr: any) {
                 console.error('[Upload] Erro ao salvar no banco:', dbErr);
                 res.status(500).json({ error: 'Erro ao salvar imagem no banco de dados' });
@@ -56,6 +72,7 @@ export class UploadController {
     }
 
     static async uploadImage(req: Request, res: Response) {
+        await ensureUploadTable();
         uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
@@ -69,16 +86,18 @@ export class UploadController {
             }
 
             try {
+                const category = req.body.category || (req.query.category as string) || 'geral';
                 const record = await prisma.upload.create({
                     data: {
                         filename: file.originalname,
                         mimeType: file.mimetype,
                         data: file.buffer,
+                        category: category,
                     }
                 });
 
                 const fileUrl = `/api/uploads/${record.id}`;
-                res.json({ id: record.id, url: fileUrl, filename: record.filename, createdAt: record.createdAt });
+                res.json({ id: record.id, url: fileUrl, filename: record.filename, category: record.category, createdAt: record.createdAt });
             } catch (dbErr: any) {
                 console.error('[Upload] Erro ao salvar no banco:', dbErr);
                 res.status(500).json({ error: 'Erro ao salvar imagem no banco de dados' });
@@ -88,11 +107,20 @@ export class UploadController {
 
     static async listUploads(req: Request, res: Response) {
         try {
+            await ensureUploadTable();
+            const { category } = req.query;
+            const whereClause: any = {};
+            if (category && category !== 'todos') {
+                whereClause.category = String(category);
+            }
+
             const uploads = await prisma.upload.findMany({
+                where: whereClause,
                 select: {
                     id: true,
                     filename: true,
                     mimeType: true,
+                    category: true,
                     createdAt: true
                 },
                 orderBy: { createdAt: 'desc' }
@@ -102,6 +130,7 @@ export class UploadController {
                 id: u.id,
                 filename: u.filename,
                 mimeType: u.mimeType,
+                category: u.category || 'geral',
                 url: `/api/uploads/${u.id}`,
                 createdAt: u.createdAt
             }));
@@ -114,6 +143,7 @@ export class UploadController {
     }
 
     static async updateUpload(req: Request, res: Response) {
+        await ensureUploadTable();
         uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
@@ -123,7 +153,7 @@ export class UploadController {
 
             try {
                 const id = req.params.id as string;
-                const { filename } = req.body;
+                const { filename, category } = req.body;
 
                 const existing = await prisma.upload.findUnique({ where: { id } });
                 if (!existing) {
@@ -134,6 +164,9 @@ export class UploadController {
                 const dataToUpdate: any = {};
                 if (filename && filename.trim()) {
                     dataToUpdate.filename = filename.trim();
+                }
+                if (category && category.trim()) {
+                    dataToUpdate.category = category.trim();
                 }
                 if (file) {
                     dataToUpdate.data = file.buffer;
@@ -150,6 +183,7 @@ export class UploadController {
                         id: true,
                         filename: true,
                         mimeType: true,
+                        category: true,
                         createdAt: true
                     }
                 });
@@ -158,6 +192,7 @@ export class UploadController {
                     id: updated.id,
                     filename: updated.filename,
                     mimeType: updated.mimeType,
+                    category: updated.category || 'geral',
                     url: `/api/uploads/${updated.id}`,
                     createdAt: updated.createdAt
                 });
