@@ -8,8 +8,8 @@ const router = Router();
 // Public: Serve image
 router.get('/:id', UploadController.serveImage);
 
-// Admin only: List all images
-router.get('/', authMiddleware, adminMiddleware, UploadController.listUploads);
+// Public: List images (supports ?category= filter)
+router.get('/', UploadController.listUploads);
 
 // Admin only: Upload image / banner
 router.post('/banner', authMiddleware, adminMiddleware, UploadController.uploadBanner);
