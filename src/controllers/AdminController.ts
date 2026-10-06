@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import bcrypt from 'bcrypt';
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { emitEvent } from '../socket';
 import { emailQueue } from '../services/queue.service';
 import { PaymentLogService } from '../services/PaymentLogService';
@@ -41,14 +42,374 @@ export class AdminController {
 
     static async listAllOrders(req: Request, res: Response) {
         try {
+            const { status } = req.query;
+            const where: any = {};
+            if (status && status !== 'ALL') {
+                where.paymentStatus = String(status);
+            }
             const orders = await prisma.order.findMany({
-                where: { paymentStatus: 'APPROVED' },
-                include: { user: true, championship: true },
+                where,
+                include: { 
+                    user: true, 
+                    championship: true,
+                    ticket: true,
+                    paymentAttempts: {
+                        orderBy: { createdAt: 'desc' }
+                    }
+                },
                 orderBy: { createdAt: 'desc' }
             });
             res.json(orders);
         } catch (e) {
+            console.error('[AdminController] Erro ao listar transações:', e);
             res.status(500).json({ error: 'Erro ao listar transações' });
+        }
+    }
+
+    static async manuallyApproveOrder(req: Request, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const adminUser = (req as any).user;
+
+            const order = await prisma.order.findUnique({
+                where: { id },
+                include: { 
+                    championship: true, 
+                    user: true, 
+                    ticket: true,
+                    paymentAttempts: { orderBy: { createdAt: 'desc' } }
+                }
+            });
+
+            if (!order) {
+                return res.status(404).json({ error: 'Pedido não encontrado.' });
+            }
+
+            if (order.paymentStatus === 'APPROVED') {
+                return res.status(400).json({ error: 'Este pedido já está aprovado.' });
+            }
+
+            let wonTshirt = order.wonTshirt;
+            if (order.championshipId) {
+                const champ = await prisma.championship.findUnique({ where: { id: order.championshipId } });
+                if (champ?.hasTshirtPromotion && !wonTshirt) {
+                    const limit = order.type === 'COMPETITOR' ? champ.tshirtLimitComp : champ.tshirtLimitVis;
+                    const winnersCount = await prisma.order.count({
+                        where: {
+                            championshipId: order.championshipId,
+                            type: order.type,
+                            paymentStatus: 'APPROVED',
+                            wonTshirt: true
+                        }
+                    });
+                    if (winnersCount < limit) {
+                        wonTshirt = true;
+                    }
+                }
+            }
+
+            await prisma.$transaction(async (tx) => {
+                await tx.order.update({
+                    where: { id },
+                    data: {
+                        paymentStatus: 'APPROVED',
+                        wonTshirt
+                    }
+                });
+
+                await tx.paymentAttempt.updateMany({
+                    where: { orderId: id },
+                    data: { status: 'APPROVED' }
+                });
+
+                if (order.includesFederation || order.type === 'FEDERATION') {
+                    const currentYear = new Date().getFullYear();
+                    await tx.user.update({
+                        where: { id: order.userId },
+                        data: { federationYear: currentYear }
+                    });
+                }
+            });
+
+            // Gerar Ticket se não existir e não for exclusivamente Federação
+            let ticket = order.ticket;
+            if (!ticket && order.type !== 'FEDERATION') {
+                const expiresAt = new Date();
+                expiresAt.setHours(expiresAt.getHours() + 24);
+
+                ticket = await prisma.ticket.create({
+                    data: {
+                        orderId: order.id,
+                        championshipId: order.championshipId,
+                        expiresAt
+                    }
+                });
+
+                await emailQueue.add('send-ticket', { ticketId: ticket.id });
+            }
+
+            // Log de auditoria
+            await PaymentLogService.log({
+                userId: order.userId,
+                orderId: order.id,
+                type: order.type,
+                amount: order.amount,
+                status: 'APPROVED',
+                logMessage: `[Aprovação Manual] Pedido aprovado manualmente pelo administrador ${adminUser?.name || 'Admin'} (${adminUser?.email || ''}). Ingresso e benefícios liberados.`
+            });
+
+            const updatedOrder = await prisma.order.findUnique({
+                where: { id },
+                include: { user: true, championship: true, ticket: true, paymentAttempts: true }
+            });
+
+            res.json({
+                success: true,
+                message: 'Pedido aprovado com sucesso! Ingresso liberado e cliente atualizado.',
+                order: updatedOrder,
+                ticket
+            });
+        } catch (e: any) {
+            console.error('[AdminController] Erro ao aprovar pedido manualmente:', e);
+            res.status(500).json({ error: 'Erro ao aprovar pedido: ' + (e?.message || 'Erro interno') });
+        }
+    }
+
+    static async checkMercadoPagoOrderStatus(req: Request, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const adminUser = (req as any).user;
+
+            const order = await prisma.order.findUnique({
+                where: { id },
+                include: { 
+                    championship: true, 
+                    user: true, 
+                    ticket: true,
+                    paymentAttempts: { orderBy: { createdAt: 'desc' } }
+                }
+            });
+
+            if (!order) {
+                return res.status(404).json({ error: 'Pedido não encontrado.' });
+            }
+
+            if (order.paymentStatus === 'APPROVED') {
+                return res.json({
+                    success: true,
+                    status: 'approved',
+                    alreadyApproved: true,
+                    message: 'Este pedido já está aprovado no sistema.'
+                });
+            }
+
+            const DEFAULT_MP_ACCESS_TOKEN = 'APP_USR-3345611795216825-031010-c151d4812a4f61dac62f4135483553a6-214542459';
+            let accessToken: string;
+            if (order.type === 'FEDERATION') {
+                accessToken = process.env.MERCADOPAGO_FED_ACCESS_TOKEN || DEFAULT_MP_ACCESS_TOKEN;
+            } else {
+                const champ = order.championship as any;
+                const champHasOwnPair = !!(champ?.mpAccessToken && champ?.mpPublicKey);
+                accessToken = champHasOwnPair
+                    ? champ.mpAccessToken
+                    : (process.env.MERCADOPAGO_ACCESS_TOKEN || DEFAULT_MP_ACCESS_TOKEN);
+            }
+
+            const client = new MercadoPagoConfig({ accessToken });
+            const paymentClient = new Payment(client);
+
+            let paymentInfo: any = null;
+
+            // 1. Tentar pelo gatewayOrderId ou gatewayPaymentId da tentativa
+            const possiblePaymentId = order.gatewayOrderId || order.paymentAttempts[0]?.gatewayPaymentId;
+            if (possiblePaymentId && possiblePaymentId.length > 5 && !isNaN(Number(possiblePaymentId))) {
+                try {
+                    paymentInfo = await paymentClient.get({ id: possiblePaymentId });
+                } catch (err: any) {
+                    console.warn(`[check-mp] Consulta direta por ID ${possiblePaymentId} falhou, tentando busca por external_reference:`, err?.message);
+                }
+            }
+
+            // 2. Se não achou por ID direto, buscar via external_reference (ID do pedido)
+            if (!paymentInfo) {
+                try {
+                    const searchRes = await paymentClient.search({
+                        options: {
+                            external_reference: order.id,
+                            sort: 'date_created',
+                            criteria: 'desc'
+                        }
+                    });
+                    if (searchRes.results && searchRes.results.length > 0) {
+                        paymentInfo = searchRes.results[0];
+                    }
+                } catch (err: any) {
+                    console.warn(`[check-mp] Busca por external_reference falhou:`, err?.message);
+                }
+            }
+
+            // 3. Fallback: procurar no paymentLog
+            if (!paymentInfo) {
+                try {
+                    const logs = await (prisma as any).paymentLog.findMany({
+                        where: { orderId: order.id },
+                        orderBy: { createdAt: 'desc' }
+                    });
+                    for (const log of logs) {
+                        if (log.gatewayResponse) {
+                            try {
+                                const parsed = typeof log.gatewayResponse === 'string' ? JSON.parse(log.gatewayResponse) : log.gatewayResponse;
+                                const gId = parsed.id || parsed.paymentId;
+                                if (gId && !isNaN(Number(gId))) {
+                                    paymentInfo = await paymentClient.get({ id: gId.toString() });
+                                    if (paymentInfo) break;
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                } catch (err) {}
+            }
+
+            if (!paymentInfo) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Nenhum registro de pagamento correspondente foi localizado no Mercado Pago para este pedido.'
+                });
+            }
+
+            console.log(`[check-mp] Pedido ${order.id} status no Mercado Pago: ${paymentInfo.status} (ID ${paymentInfo.id})`);
+
+            // Se o Mercado Pago liberou e aprovou:
+            if (paymentInfo.status === 'approved') {
+                let wonTshirt = order.wonTshirt;
+                if (order.championshipId) {
+                    const champ = await prisma.championship.findUnique({ where: { id: order.championshipId } });
+                    if (champ?.hasTshirtPromotion && !wonTshirt) {
+                        const limit = order.type === 'COMPETITOR' ? champ.tshirtLimitComp : champ.tshirtLimitVis;
+                        const winnersCount = await prisma.order.count({
+                            where: {
+                                championshipId: order.championshipId,
+                                type: order.type,
+                                paymentStatus: 'APPROVED',
+                                wonTshirt: true
+                            }
+                        });
+                        if (winnersCount < limit) {
+                            wonTshirt = true;
+                        }
+                    }
+                }
+
+                await prisma.$transaction(async (tx) => {
+                    await tx.order.update({
+                        where: { id },
+                        data: {
+                            paymentStatus: 'APPROVED',
+                            gatewayOrderId: paymentInfo.id?.toString(),
+                            wonTshirt
+                        }
+                    });
+
+                    await tx.paymentAttempt.updateMany({
+                        where: { orderId: id },
+                        data: {
+                            status: 'APPROVED',
+                            gatewayPaymentId: paymentInfo.id?.toString()
+                        }
+                    });
+
+                    if (order.includesFederation || order.type === 'FEDERATION') {
+                        const currentYear = new Date().getFullYear();
+                        await tx.user.update({
+                            where: { id: order.userId },
+                            data: { federationYear: currentYear }
+                        });
+                    }
+                });
+
+                // Gerar Ticket se não existir
+                let ticket = order.ticket;
+                if (!ticket && order.type !== 'FEDERATION') {
+                    const expiresAt = new Date();
+                    expiresAt.setHours(expiresAt.getHours() + 24);
+
+                    ticket = await prisma.ticket.create({
+                        data: {
+                            orderId: order.id,
+                            championshipId: order.championshipId,
+                            expiresAt
+                        }
+                    });
+
+                    await emailQueue.add('send-ticket', { ticketId: ticket.id });
+                }
+
+                // Log
+                await PaymentLogService.log({
+                    userId: order.userId,
+                    orderId: order.id,
+                    type: order.type,
+                    amount: order.amount,
+                    status: 'APPROVED',
+                    logMessage: `[Sincronização MP] Pagamento consultado diretamente no Mercado Pago (ID ${paymentInfo.id}) e APROVADO com sucesso.`,
+                    gatewayResponse: paymentInfo
+                });
+
+                const updatedOrder = await prisma.order.findUnique({
+                    where: { id },
+                    include: { user: true, championship: true, ticket: true, paymentAttempts: true }
+                });
+
+                return res.json({
+                    success: true,
+                    status: 'approved',
+                    message: `Pagamento APROVADO no Mercado Pago! Pedido atualizado e ingresso emitido com sucesso.`,
+                    order: updatedOrder,
+                    ticket
+                });
+            }
+
+            // Se ainda pendente
+            if (paymentInfo.status === 'pending' || paymentInfo.status === 'in_process') {
+                return res.json({
+                    success: false,
+                    status: paymentInfo.status,
+                    statusDetail: paymentInfo.status_detail,
+                    message: `O pagamento ainda consta como PENDENTE no Mercado Pago (${paymentInfo.status_detail || 'aguardando transferência/compensação'}). O Mercado Pago ainda não liberou o valor.`
+                });
+            }
+
+            // Se recusado / cancelado
+            return res.json({
+                success: false,
+                status: paymentInfo.status,
+                statusDetail: paymentInfo.status_detail,
+                message: `Status no Mercado Pago: ${paymentInfo.status} (${paymentInfo.status_detail || 'não aprovado'}).`
+            });
+
+        } catch (e: any) {
+            console.error('[AdminController] Erro ao consultar status no MP:', e);
+            res.status(500).json({ error: 'Erro ao consultar status no Mercado Pago: ' + (e?.message || 'Erro interno') });
+        }
+    }
+
+    static async deleteOrder(req: Request, res: Response) {
+        try {
+            const id = req.params.id as string;
+            const order = await prisma.order.findUnique({ where: { id } });
+            if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' });
+
+            await prisma.$transaction(async (tx) => {
+                await tx.paymentAttempt.deleteMany({ where: { orderId: id } });
+                await tx.ticketScan.deleteMany({ where: { ticket: { orderId: id } } });
+                await tx.ticket.deleteMany({ where: { orderId: id } });
+                await tx.order.delete({ where: { id } });
+            });
+
+            res.json({ success: true, message: 'Pedido excluído com sucesso.' });
+        } catch (e: any) {
+            console.error('[AdminController] Erro ao excluir pedido:', e);
+            res.status(500).json({ error: 'Erro ao excluir pedido: ' + (e?.message || 'Erro interno') });
         }
     }
 

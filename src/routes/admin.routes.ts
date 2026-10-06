@@ -44,6 +44,9 @@ router.patch('/championships/:id/reset-tracking', requireRoles(['ADMIN', 'SUPPOR
 
 // Financeiro / Pedidos
 router.get('/orders', requireRoles(['ADMIN', 'SUPPORT']), AdminController.listAllOrders);
+router.post('/orders/:id/approve', requireRoles(['ADMIN', 'SUPPORT']), AdminController.manuallyApproveOrder);
+router.post('/orders/:id/check-mp', requireRoles(['ADMIN', 'SUPPORT']), AdminController.checkMercadoPagoOrderStatus);
+router.delete('/orders/:id', requireRoles(['ADMIN']), AdminController.deleteOrder);
 router.get('/payment-logs', requireRoles(['ADMIN', 'SUPPORT']), AdminController.listPaymentLogs);
 
 // Usuários
