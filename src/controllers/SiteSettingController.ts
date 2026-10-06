@@ -38,15 +38,21 @@ O Zeus cria um novo padrão.`,
     'trophy-gonzales': {
         id: 'trophy-gonzales',
         title: 'Trophy Gonzales',
-        subtitle: 'Excelência em premiações e reconhecimento.',
+        subtitle: 'Design Escultórico e Reconhecimento no Mais Alto Nível do Fisiculturismo',
         heroBanner: '',
         heroVideo: '',
         secondaryVideo: '',
-        mission: 'Criar troféus e medalhas que não sejam apenas objetos, mas símbolos eternos de conquista e glória.',
+        mission: 'Criar troféus e medalhas que não sejam apenas objetos, mas símbolos eternos de conquista, arte e glória.',
         vision: 'Ser a referência absoluta em design e qualidade de premiações esportivas personalizadas.',
-        values: 'Qualidade Artesanal, Criatividade, Pontualidade e Reconhecimento.',
-        historyTitle: 'Sobre a Trophy Gonzales',
-        historyText: 'A Trophy Gonzales é referência em design e produção de troféus de alta definição para fisiculturismo e grandes competições. Peças exclusivas moldadas com padrão escultural.',
+        values: 'Qualidade Artesanal, Rigor Escultórico, Pontualidade e Reconhecimento ao Atleta.',
+        historyTitle: 'A Arte de Consagrar Campeões',
+        historyText: `A GLÓRIA NÃO É APENAS VENCER. É ETERNIZAR A CONQUISTA.
+
+A Trophy Gonzales nasceu com um propósito inegociável: criar premiações que estejam à altura do sacrifício, da disciplina e da dedicação dos maiores atletas do esporte.
+
+Não produzimos simples troféus; esculpimos obras de arte exclusivas com acabamento de alta definição, riqueza de detalhes anatômicos e imponência escultórica. Cada peça é moldada artesanalmente com rigor técnico e finalizada em banhos nobres de ouro, prata e bronze, transformando o pódio em um momento eterno.
+
+Como parceira e fabricante oficial do Zeus Evolution, a Trophy Gonzales define um novo patamar de prestígio no cenário nacional e internacional. Quando um campeão ergue o Troféu Gonzales, ele segura a materialização da sua própria história de superação.`,
         instagramUrl: 'https://instagram.com/trophygonzales',
         whatsappUrl: 'https://wa.me/553492354877',
         whatsappPhone: '+55 34 9235-4877',
@@ -123,6 +129,16 @@ async function ensureSiteSettingTable() {
         await prisma.$executeRawUnsafe(`
             ALTER TABLE "SiteSetting" ADD COLUMN IF NOT EXISTS "instructionImages" TEXT;
         `);
+
+        // Upgrade legacy short text to high quality editorial text
+        await prisma.$executeRawUnsafe(`
+            UPDATE "SiteSetting"
+            SET "historyTitle" = 'A Arte de Consagrar Campeões',
+                "subtitle" = 'Design Escultórico e Reconhecimento no Mais Alto Nível do Fisiculturismo',
+                "historyText" = 'A GLÓRIA NÃO É APENAS VENCER. É ETERNIZAR A CONQUISTA.\n\nA Trophy Gonzales nasceu com um propósito inegociável: criar premiações que estejam à altura do sacrifício, da disciplina e da dedicação dos maiores atletas do esporte.\n\nNão produzimos simples troféus; esculpimos obras de arte exclusivas com acabamento de alta definição, riqueza de detalhes anatômicos e imponência escultórica. Cada peça é moldada artesanalmente com rigor técnico e finalizada em banhos nobres de ouro, prata e bronze, transformando o pódio em um momento eterno.\n\nComo parceira e fabricante oficial do Zeus Evolution, a Trophy Gonzales define um novo patamar de prestígio no cenário nacional e internacional. Quando um campeão ergue o Troféu Gonzales, ele segura a materialização da sua própria história de superação.'
+            WHERE "id" = 'trophy-gonzales' AND ("historyText" LIKE '%referência em design%' OR "historyText" IS NULL OR "historyText" = '');
+        `);
+
         siteSettingTableChecked = true;
     } catch (e: any) {
         console.warn('[SiteSetting] ensureSiteSettingTable check:', e?.message || e);
