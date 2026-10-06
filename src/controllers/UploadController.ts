@@ -4,7 +4,7 @@ import { prisma } from '../prisma';
 
 const storage = multer.memoryStorage();
 
-const uploadImageMiddleware = multer({
+const uploadAnyMiddleware = multer({
     storage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
@@ -13,38 +13,36 @@ const uploadImageMiddleware = multer({
         }
         cb(new Error('Apenas arquivos de imagem são permitidos!'));
     }
-}).single('file');
+}).any();
 
-const uploadBannerMiddleware = multer({
-    storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
-            return cb(null, true);
-        }
-        cb(new Error('Apenas arquivos de imagem são permitidos!'));
+function getUploadedFile(req: Request): Express.Multer.File | undefined {
+    if (req.file) return req.file;
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+        return req.files[0];
     }
-}).single('banner');
+    return undefined;
+}
 
 export class UploadController {
     static async uploadBanner(req: Request, res: Response) {
-        uploadBannerMiddleware(req, res, async (err) => {
+        uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
             } else if (err) {
                 return res.status(400).json({ error: err.message });
             }
 
-            if (!req.file) {
+            const file = getUploadedFile(req);
+            if (!file) {
                 return res.status(400).json({ error: 'Nenhum arquivo enviado' });
             }
 
             try {
                 const record = await prisma.upload.create({
                     data: {
-                        filename: req.file.originalname,
-                        mimeType: req.file.mimetype,
-                        data: req.file.buffer,
+                        filename: file.originalname,
+                        mimeType: file.mimetype,
+                        data: file.buffer,
                     }
                 });
 
@@ -58,23 +56,24 @@ export class UploadController {
     }
 
     static async uploadImage(req: Request, res: Response) {
-        uploadImageMiddleware(req, res, async (err) => {
+        uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
             } else if (err) {
                 return res.status(400).json({ error: err.message });
             }
 
-            if (!req.file) {
+            const file = getUploadedFile(req);
+            if (!file) {
                 return res.status(400).json({ error: 'Nenhum arquivo enviado' });
             }
 
             try {
                 const record = await prisma.upload.create({
                     data: {
-                        filename: req.file.originalname,
-                        mimeType: req.file.mimetype,
-                        data: req.file.buffer,
+                        filename: file.originalname,
+                        mimeType: file.mimetype,
+                        data: file.buffer,
                     }
                 });
 
@@ -115,7 +114,7 @@ export class UploadController {
     }
 
     static async updateUpload(req: Request, res: Response) {
-        uploadImageMiddleware(req, res, async (err) => {
+        uploadAnyMiddleware(req, res, async (err) => {
             if (err instanceof multer.MulterError) {
                 return res.status(400).json({ error: 'Erro no upload: ' + err.message });
             } else if (err) {
@@ -131,15 +130,16 @@ export class UploadController {
                     return res.status(404).json({ error: 'Imagem não encontrada' });
                 }
 
+                const file = getUploadedFile(req);
                 const dataToUpdate: any = {};
                 if (filename && filename.trim()) {
                     dataToUpdate.filename = filename.trim();
                 }
-                if (req.file) {
-                    dataToUpdate.data = req.file.buffer;
-                    dataToUpdate.mimeType = req.file.mimetype;
+                if (file) {
+                    dataToUpdate.data = file.buffer;
+                    dataToUpdate.mimeType = file.mimetype;
                     if (!filename) {
-                        dataToUpdate.filename = req.file.originalname;
+                        dataToUpdate.filename = file.originalname;
                     }
                 }
 
