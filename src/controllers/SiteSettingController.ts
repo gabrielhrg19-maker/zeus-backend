@@ -97,9 +97,39 @@ Muscle Tan não é tendência.
     }
 };
 
+let siteSettingTableChecked = false;
+async function ensureSiteSettingTable() {
+    if (siteSettingTableChecked) return;
+    try {
+        await prisma.$executeRawUnsafe(`
+            CREATE TABLE IF NOT EXISTS "SiteSetting" (
+                "id" TEXT NOT NULL PRIMARY KEY,
+                "title" TEXT NOT NULL DEFAULT 'Zeus Evolution',
+                "subtitle" TEXT NOT NULL DEFAULT 'Expo Fitness e Campeonato de Fisiculturismo',
+                "heroBanner" TEXT,
+                "heroVideo" TEXT,
+                "secondaryVideo" TEXT,
+                "mission" TEXT,
+                "vision" TEXT,
+                "values" TEXT,
+                "historyTitle" TEXT DEFAULT 'A História do Zeus Evolution',
+                "historyText" TEXT,
+                "instagramUrl" TEXT DEFAULT 'https://www.instagram.com/zeusevolutioncb?igsh=MWR1Y25lZWo1NDM3bw==',
+                "whatsappUrl" TEXT DEFAULT 'https://wa.me/553492440149',
+                "whatsappPhone" TEXT DEFAULT '+55 34 9244-0149',
+                "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        siteSettingTableChecked = true;
+    } catch (e: any) {
+        console.warn('[SiteSetting] ensureSiteSettingTable check:', e?.message || e);
+    }
+}
+
 export class SiteSettingController {
     static async getSettings(req: Request, res: Response) {
         try {
+            await ensureSiteSettingTable();
             const pageId = (req.params.page || req.query.page || '') as string;
 
             if (pageId) {
@@ -147,18 +177,34 @@ export class SiteSettingController {
 
     static async updateSettings(req: Request, res: Response) {
         try {
+            await ensureSiteSettingTable();
             const data = req.body || {};
             const rawPageId = (req.params.page || req.query.page || data.page || 'default') as string;
             const targetId = rawPageId === 'zeus' ? 'default' : rawPageId;
 
             const fallback = defaultSettingsByPage[targetId] || defaultSettingsByPage.default;
 
+            const cleanCreateData = {
+                title: data.title ?? fallback.title ?? 'Zeus Evolution',
+                subtitle: data.subtitle ?? fallback.subtitle ?? '',
+                heroBanner: data.heroBanner ?? fallback.heroBanner ?? null,
+                heroVideo: data.heroVideo ?? fallback.heroVideo ?? null,
+                secondaryVideo: data.secondaryVideo ?? fallback.secondaryVideo ?? null,
+                mission: data.mission ?? fallback.mission ?? null,
+                vision: data.vision ?? fallback.vision ?? null,
+                values: data.values ?? fallback.values ?? null,
+                historyTitle: data.historyTitle ?? fallback.historyTitle ?? 'A História do Zeus Evolution',
+                historyText: data.historyText ?? fallback.historyText ?? null,
+                instagramUrl: data.instagramUrl ?? fallback.instagramUrl ?? 'https://www.instagram.com/zeusevolutioncb?igsh=MWR1Y25lZWo1NDM3bw==',
+                whatsappUrl: data.whatsappUrl ?? fallback.whatsappUrl ?? 'https://wa.me/553492440149',
+                whatsappPhone: data.whatsappPhone ?? fallback.whatsappPhone ?? '+55 34 9244-0149',
+            };
+
             const updated = await prisma.siteSetting.upsert({
                 where: { id: targetId },
                 create: {
-                    ...fallback,
-                    ...data,
-                    id: targetId
+                    id: targetId,
+                    ...cleanCreateData
                 },
                 update: {
                     ...(data.title !== undefined && { title: data.title }),
@@ -178,9 +224,9 @@ export class SiteSettingController {
             });
 
             res.json(updated);
-        } catch (error) {
+        } catch (error: any) {
             console.error('[SiteSettings] Erro ao atualizar configurações:', error);
-            res.status(500).json({ error: 'Erro ao atualizar configurações do site' });
+            res.status(500).json({ error: error?.message || 'Erro ao atualizar configurações do site' });
         }
     }
 }
