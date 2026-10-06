@@ -14,6 +14,7 @@ import uploadRoutes from './routes/upload.routes';
 import eventRoutes from './routes/event.routes';
 import collaboratorRoutes from './routes/collaborator.routes';
 import partnerRoutes from './routes/partner.routes';
+import sponsorRoutes from './routes/sponsor.routes';
 import siteSettingRoutes from './routes/siteSetting.routes';
 import { startEmailWorker } from './queues/email.worker';
 
@@ -42,6 +43,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/collaborators', collaboratorRoutes);
 app.use('/api/partners', partnerRoutes);
+app.use('/api/sponsors', sponsorRoutes);
 app.use('/api/site-settings', siteSettingRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
